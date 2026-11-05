@@ -1178,10 +1178,6 @@ function unlockAudioContext() {
     if (soundManager.ctx && soundManager.ctx.state === "suspended") {
       soundManager.ctx.resume();
     }
-    patakaAudio.volume = 1;
-    patakaAudio.currentTime = 0;
-    const p = patakaAudio.play();
-    if (p && typeof p.catch === "function") p.catch(() => {});
   } catch (e) {}
 }
 window.addEventListener("pointerdown", unlockAudioContext, { once: true });
@@ -1210,22 +1206,51 @@ function buildTextShape() {
   TEXT_POINTS = [];
   if (!stageW || !stageH) return;
   const off = document.createElement("canvas");
-  off.width = stageW;
-  off.height = stageH;
+  off.width = Math.ceil(stageW);
+  off.height = Math.ceil(stageH);
   const octx = off.getContext("2d");
   octx.fillStyle = "#fff";
-  const fontSize = Math.min(stageW / 7, stageH / 3.2, 130);
+  let fontSize = Math.min(stageW / 7, stageH / 3.2, 130);
   octx.font = '900 ' + fontSize + 'px "Russo One", arial, sans-serif';
   octx.textAlign = "center";
   octx.textBaseline = "middle";
-  octx.fillText("Happy Diwali", stageW / 2, stageH / 2);
-  const img = octx.getImageData(0, 0, stageW, stageH).data;
+  const textLines = IS_MOBILE ? ["HAPPY", "DIWALI"] : ["HAPPY DIWALI"];
+  const getTextWidth = (line) =>
+    [...line].reduce(
+      (width, character) => width + octx.measureText(character).width,
+      0,
+    ) +
+    Math.max(0, line.length - 1) * fontSize * 0.08;
+  const textWidth = Math.max(...textLines.map(getTextWidth));
+  if (textWidth > stageW * 0.9) {
+    fontSize *= (stageW * 0.9) / textWidth;
+    octx.font = '900 ' + fontSize + 'px "Russo One", arial, sans-serif';
+  }
+  textLines.forEach((line, index) => {
+    const lineOffset = (index - (textLines.length - 1) / 2) * fontSize * 1.1;
+    const characters = [...line];
+    const spacing = fontSize * 0.08;
+    const widths = characters.map((character) => octx.measureText(character).width);
+    const lineWidth =
+      widths.reduce((width, characterWidth) => width + characterWidth, 0) +
+      Math.max(0, characters.length - 1) * spacing;
+    let x = off.width / 2 - lineWidth / 2;
+    characters.forEach((character, characterIndex) => {
+      octx.fillText(
+        character,
+        x + widths[characterIndex] / 2,
+        off.height / 2 + lineOffset,
+      );
+      x += widths[characterIndex] + spacing;
+    });
+  });
+  const img = octx.getImageData(0, 0, off.width, off.height).data;
   const step = Math.max(2, Math.floor(fontSize / 30));
   const cx = stageW / 2;
   const cy = stageH / 2;
-  for (let y = 0; y < stageH; y += step) {
-    for (let x = 0; x < stageW; x += step) {
-      const i = (y * stageW + x) * 4 + 3;
+  for (let y = 0; y < off.height; y += step) {
+    for (let x = 0; x < off.width; x += step) {
+      const i = (y * off.width + x) * 4 + 3;
       if (img[i] > 128) TEXT_POINTS.push({ dx: x - cx, dy: y - cy });
     }
   }
@@ -2379,10 +2404,19 @@ const soundManager = {
     bufferSource.start(0);
   },
 };
-// Dedicated audio element for the pataka (firecracker) sound effect.
-const patakaAudio = new Audio("./sound.wav");
-patakaAudio.preload = "auto";
-patakaAudio.volume = 0.9;
+const patakaNoiseBuffer = (() => {
+  const buffer = soundManager.ctx.createBuffer(
+    1,
+    Math.floor(soundManager.ctx.sampleRate * 0.35),
+    soundManager.ctx.sampleRate,
+  );
+  const samples = buffer.getChannelData(0);
+  for (let i = 0; i < samples.length; i++) {
+    samples[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / samples.length, 2);
+  }
+  return buffer;
+})();
+let lastPatakaSoundTime = 0;
 
 function playPatakaSound(volume = 1) {
   // Respect the same gating rules as soundManager.
@@ -2393,29 +2427,51 @@ function playPatakaSound(volume = 1) {
     return;
   }
 
-  try {
-    patakaAudio.volume = Math.max(0.1, Math.min(1, volume));
-    patakaAudio.currentTime = 0;
-    const playPromise = patakaAudio.play();
-    if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch(() => {});
-    }
-  } catch (e) {}
+  const now = performance.now();
+  if (now - lastPatakaSoundTime < 90) return;
+  lastPatakaSoundTime = now;
+
+  const ctx = soundManager.ctx;
+  const startTime = ctx.currentTime;
+  const output = ctx.createGain();
+  output.gain.setValueAtTime(Math.max(0, Math.min(0.4, volume * 0.4)), startTime);
+  output.connect(ctx.destination);
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = patakaNoiseBuffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(1400, startTime);
+  filter.frequency.exponentialRampToValueAtTime(140, startTime + 0.28);
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(1, startTime);
+  noiseGain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+  noise.connect(filter);
+  filter.connect(noiseGain);
+  noiseGain.connect(output);
+  noise.start(startTime);
+  noise.stop(startTime + 0.32);
+
+  const thump = ctx.createOscillator();
+  const thumpGain = ctx.createGain();
+  thump.type = "sine";
+  thump.frequency.setValueAtTime(110, startTime);
+  thump.frequency.exponentialRampToValueAtTime(42, startTime + 0.18);
+  thumpGain.gain.setValueAtTime(0.8, startTime);
+  thumpGain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2);
+  thump.connect(thumpGain);
+  thumpGain.connect(output);
+  thump.start(startTime);
+  thump.stop(startTime + 0.22);
+  thump.onended = () => output.disconnect();
 }
 
-// Attempt to auto-play pataka sound on page load (autoplay policy may block until interaction).
 function playPatakaOnLoad() {
-  try {
-    if (soundManager.ctx && soundManager.ctx.state === "suspended") {
-      soundManager.ctx.resume().catch(() => {});
-    }
-    patakaAudio.volume = 0.9;
-    const p = patakaAudio.play();
-    if (p && typeof p.catch === "function") p.catch(() => {});
-  } catch (e) {}
+  if (soundManager.ctx && soundManager.ctx.state === "suspended") {
+    soundManager.ctx.resume().catch(() => {});
+  }
+  playPatakaSound(0.9);
 }
-playPatakaOnLoad();
-
 // Kick things off.
 
 function setLoadingStatus(status) {
@@ -2424,14 +2480,22 @@ function setLoadingStatus(status) {
 
 if (IS_HEADER) {
   init();
+  playPatakaOnLoad();
 } else {
   // Allow status to render, then preload assets and start app.
   setLoadingStatus("Lighting Fuses");
   setTimeout(() => {
-    soundManager.preload().then(init, (reason) => {
-      init();
-      // setLoadingStatus('Error Loading Audio');
-      return Promise.reject(reason);
-    });
+    soundManager.preload().then(
+      () => {
+        init();
+        playPatakaOnLoad();
+      },
+      (reason) => {
+        init();
+        playPatakaOnLoad();
+        // setLoadingStatus('Error Loading Audio');
+        return Promise.reject(reason);
+      },
+    );
   }, 0);
 }
