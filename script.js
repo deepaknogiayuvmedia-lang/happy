@@ -100,7 +100,7 @@ const store = {
   state: {
     // will be unpaused in init()
     paused: true,
-    soundEnabled: false,
+    soundEnabled: true,
     menuOpen: false,
     openHelpTopic: null,
     fullscreen: isFullscreen(),
@@ -1210,6 +1210,19 @@ mainStage.addEventListener("pointerstart", handlePointerStart);
 mainStage.addEventListener("pointerend", handlePointerEnd);
 mainStage.addEventListener("pointermove", handlePointerMove);
 window.addEventListener("keydown", handleKeydown);
+
+// Unlock audio on first user interaction (browser autoplay policy).
+function unlockAudioContext() {
+  try {
+    if (soundManager.ctx.state === "suspended") {
+      soundManager.ctx.resume();
+    }
+    playPatakaSound(1);
+  } catch (e) {}
+}
+window.addEventListener("pointerdown", unlockAudioContext, { once: true });
+window.addEventListener("click", unlockAudioContext, { once: true });
+window.addEventListener("touchstart", unlockAudioContext, { once: true });
 
 // Account for window resize and custom scale changes.
 function handleResize() {
@@ -2415,34 +2428,32 @@ function playPatakaSound(volume = 1) {
   const ctx = soundManager.ctx;
   if (!ctx) return;
 
-  const duration = 0.35;
+  // Try to resume (browser autoplay policy).
+  if (ctx.state === "suspended") {
+    ctx.resume().catch(() => {});
+  }
+
+  const duration = 0.4;
   const sampleRate = ctx.sampleRate;
   const bufferSize = Math.floor(sampleRate * duration);
   const buffer = ctx.createBuffer(1, bufferSize, sampleRate);
   const data = buffer.getChannelData(0);
 
-  // Sharp crack followed by a decaying rumble.
+  // Loud crack followed by decaying rumble.
   for (let i = 0; i < bufferSize; i++) {
     const t = i / bufferSize;
-    const crack = (Math.random() * 2 - 1) * Math.pow(1 - t, 6);
-    const rumble = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * 0.35;
-    data[i] = crack + rumble;
+    const crack = (Math.random() * 2 - 1) * Math.pow(1 - t, 8);
+    const rumble = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * 0.5;
+    data[i] = crack * 0.9 + rumble;
   }
 
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 
-  // Bandpass to give a "cracker" character.
-  const filter = ctx.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.value = 1500;
-  filter.Q.value = 0.8;
-
   const gain = ctx.createGain();
-  gain.gain.value = Math.max(0, Math.min(1, volume));
+  gain.gain.value = Math.max(0.1, Math.min(1, volume)) * 1.2;
 
-  source.connect(filter);
-  filter.connect(gain);
+  source.connect(gain);
   gain.connect(ctx.destination);
   source.start(0);
 }
