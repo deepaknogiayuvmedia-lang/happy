@@ -1223,9 +1223,9 @@ function unlockAudioContext() {
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch (e) {}
 }
-window.addEventListener("pointerdown", unlockAudioContext, { once: true });
-window.addEventListener("click", unlockAudioContext, { once: true });
-window.addEventListener("touchstart", unlockAudioContext, { once: true });
+// window.addEventListener("pointerdown", unlockAudioContext, { once: true });
+// window.addEventListener("click", unlockAudioContext, { once: true });
+// window.addEventListener("touchstart", unlockAudioContext, { once: true });
 
 // Account for window resize and custom scale changes.
 function handleResize() {
