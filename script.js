@@ -1875,6 +1875,7 @@ class Shell {
         star.onDeath = null;
       }
       soundManager.playSound("burst", 1);
+      playPatakaSound(0.9);
       return;
     }
 
@@ -2101,6 +2102,7 @@ class Shell {
       );
       const soundScale = (1 - sizeDifferenceFromMaxSize / maxDiff) * 0.3 + 0.7;
       soundManager.playSound("burst", soundScale);
+      playPatakaSound(soundScale);
     }
   }
 }
@@ -2400,6 +2402,51 @@ const soundManager = {
     bufferSource.start(0);
   },
 };
+// Firecracker ("pataka") sound synthesized with Web Audio API.
+// Used to give a distinct cracker bang in addition to the existing burst sounds.
+function playPatakaSound(volume = 1) {
+  // Respect the same gating rules as soundManager.
+  if (typeof canPlaySoundSelector === "function" && !canPlaySoundSelector()) {
+    return;
+  }
+  if (typeof simSpeed !== "undefined" && simSpeed < 0.95) {
+    return;
+  }
+  const ctx = soundManager.ctx;
+  if (!ctx) return;
+
+  const duration = 0.35;
+  const sampleRate = ctx.sampleRate;
+  const bufferSize = Math.floor(sampleRate * duration);
+  const buffer = ctx.createBuffer(1, bufferSize, sampleRate);
+  const data = buffer.getChannelData(0);
+
+  // Sharp crack followed by a decaying rumble.
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize;
+    const crack = (Math.random() * 2 - 1) * Math.pow(1 - t, 6);
+    const rumble = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * 0.35;
+    data[i] = crack + rumble;
+  }
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+
+  // Bandpass to give a "cracker" character.
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1500;
+  filter.Q.value = 0.8;
+
+  const gain = ctx.createGain();
+  gain.gain.value = Math.max(0, Math.min(1, volume));
+
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(0);
+}
+
 // Kick things off.
 
 function setLoadingStatus(status) {
