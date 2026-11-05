@@ -461,22 +461,22 @@ const updateConfigNoEvent = () => updateConfig();
 appNodes.quality.addEventListener("input", updateConfigNoEvent);
 appNodes.shellType.addEventListener("input", updateConfigNoEvent);
 appNodes.shellSize.addEventListener("input", updateConfigNoEvent);
-appNodes.autoLaunch.addEventListener("click", () =>
-  setTimeout(updateConfig, 0),
-);
-appNodes.finaleMode.addEventListener("click", () =>
-  setTimeout(updateConfig, 0),
-);
-appNodes.skyLighting.addEventListener("input", updateConfigNoEvent);
-appNodes.longExposure.addEventListener("click", () =>
-  setTimeout(updateConfig, 0),
-);
-appNodes.hideControls.addEventListener("click", () =>
-  setTimeout(updateConfig, 0),
-);
-appNodes.fullscreen.addEventListener("click", () =>
-  setTimeout(toggleFullscreen, 0),
-);
+// appNodes.autoLaunch.addEventListener("click", () =>
+//   setTimeout(updateConfig, 0),
+// );
+// appNodes.finaleMode.addEventListener("click", () =>
+//   setTimeout(updateConfig, 0),
+// );
+// appNodes.skyLighting.addEventListener("input", updateConfigNoEvent);
+// appNodes.longExposure.addEventListener("click", () =>
+//   setTimeout(updateConfig, 0),
+// );
+// appNodes.hideControls.addEventListener("click", () =>
+//   setTimeout(updateConfig, 0),
+// );
+// appNodes.fullscreen.addEventListener("click", () =>
+//   setTimeout(toggleFullscreen, 0),
+// );
 // Changing scaleFactor requires triggering resize handling code as well.
 appNodes.scaleFactor.addEventListener("input", () => {
   updateConfig();
@@ -810,12 +810,15 @@ const shellTypes = {
   Willow: willowShell,
 };
 
-const shellNames = Object.keys(shellTypes);
+const shellNames = Object.keys(shellTypes).filter((name) => name !== "Text");
 
 function init() {
   // Remove loading state
   document.querySelector(".loading-init").remove();
   appNodes.stageContainer.classList.remove("remove");
+
+  // Hide all controls for uninterrupted continuous show.
+  store.state.config.hideControls = true;
 
   // Populate dropdowns
   function setOptionsForSelect(node, options) {
@@ -1148,34 +1151,8 @@ let activePointerCount = 0;
 let isUpdatingSpeed = false;
 
 function handlePointerStart(event) {
+  // Click/tap events are disabled — show runs fully automatic.
   activePointerCount++;
-  const btnSize = 50;
-
-  if (event.y < btnSize) {
-    if (event.x < btnSize) {
-      togglePause();
-      return;
-    }
-    if (
-      event.x > mainStage.width / 2 - btnSize / 2 &&
-      event.x < mainStage.width / 2 + btnSize / 2
-    ) {
-      toggleSound();
-      return;
-    }
-    if (event.x > mainStage.width - btnSize) {
-      toggleMenu();
-      return;
-    }
-  }
-
-  if (!isRunning()) return;
-
-  if (updateSpeedFromEvent(event)) {
-    isUpdatingSpeed = true;
-  } else if (event.onCanvas) {
-    launchShellFromConfig(event);
-  }
 }
 
 function handlePointerEnd(event) {
@@ -1191,30 +1168,14 @@ function handlePointerMove(event) {
   }
 }
 
-function handleKeydown(event) {
-  // P
-  if (event.keyCode === 80) {
-    togglePause();
-  }
-  // O
-  else if (event.keyCode === 79) {
-    toggleMenu();
-  }
-  // Esc
-  else if (event.keyCode === 27) {
-    toggleMenu(false);
-  }
-}
-
 mainStage.addEventListener("pointerstart", handlePointerStart);
 mainStage.addEventListener("pointerend", handlePointerEnd);
 mainStage.addEventListener("pointermove", handlePointerMove);
-window.addEventListener("keydown", handleKeydown);
 
 // Unlock audio on first user interaction (browser autoplay policy).
 function unlockAudioContext() {
   try {
-    if (soundManager.ctx.state === "suspended") {
+    if (soundManager.ctx && soundManager.ctx.state === "suspended") {
       soundManager.ctx.resume();
     }
     patakaAudio.volume = 1;
@@ -1223,9 +1184,9 @@ function unlockAudioContext() {
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch (e) {}
 }
-// window.addEventListener("pointerdown", unlockAudioContext, { once: true });
-// window.addEventListener("click", unlockAudioContext, { once: true });
-// window.addEventListener("touchstart", unlockAudioContext, { once: true });
+window.addEventListener("pointerdown", unlockAudioContext, { once: true });
+window.addEventListener("click", unlockAudioContext, { once: true });
+window.addEventListener("touchstart", unlockAudioContext, { once: true });
 
 // Account for window resize and custom scale changes.
 function handleResize() {
@@ -2441,6 +2402,19 @@ function playPatakaSound(volume = 1) {
     }
   } catch (e) {}
 }
+
+// Attempt to auto-play pataka sound on page load (autoplay policy may block until interaction).
+function playPatakaOnLoad() {
+  try {
+    if (soundManager.ctx && soundManager.ctx.state === "suspended") {
+      soundManager.ctx.resume().catch(() => {});
+    }
+    patakaAudio.volume = 0.9;
+    const p = patakaAudio.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch (e) {}
+}
+playPatakaOnLoad();
 
 // Kick things off.
 
