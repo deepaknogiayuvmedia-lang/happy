@@ -1217,7 +1217,10 @@ function unlockAudioContext() {
     if (soundManager.ctx.state === "suspended") {
       soundManager.ctx.resume();
     }
-    playPatakaSound(1);
+    patakaAudio.volume = 1;
+    patakaAudio.currentTime = 0;
+    const p = patakaAudio.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
   } catch (e) {}
 }
 window.addEventListener("pointerdown", unlockAudioContext, { once: true });
@@ -2415,8 +2418,11 @@ const soundManager = {
     bufferSource.start(0);
   },
 };
-// Firecracker ("pataka") sound synthesized with Web Audio API.
-// Used to give a distinct cracker bang in addition to the existing burst sounds.
+// Dedicated audio element for the pataka (firecracker) sound effect.
+const patakaAudio = new Audio("./sound.wav");
+patakaAudio.preload = "auto";
+patakaAudio.volume = 0.9;
+
 function playPatakaSound(volume = 1) {
   // Respect the same gating rules as soundManager.
   if (typeof canPlaySoundSelector === "function" && !canPlaySoundSelector()) {
@@ -2425,37 +2431,15 @@ function playPatakaSound(volume = 1) {
   if (typeof simSpeed !== "undefined" && simSpeed < 0.95) {
     return;
   }
-  const ctx = soundManager.ctx;
-  if (!ctx) return;
 
-  // Try to resume (browser autoplay policy).
-  if (ctx.state === "suspended") {
-    ctx.resume().catch(() => {});
-  }
-
-  const duration = 0.4;
-  const sampleRate = ctx.sampleRate;
-  const bufferSize = Math.floor(sampleRate * duration);
-  const buffer = ctx.createBuffer(1, bufferSize, sampleRate);
-  const data = buffer.getChannelData(0);
-
-  // Loud crack followed by decaying rumble.
-  for (let i = 0; i < bufferSize; i++) {
-    const t = i / bufferSize;
-    const crack = (Math.random() * 2 - 1) * Math.pow(1 - t, 8);
-    const rumble = (Math.random() * 2 - 1) * Math.pow(1 - t, 2) * 0.5;
-    data[i] = crack * 0.9 + rumble;
-  }
-
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-
-  const gain = ctx.createGain();
-  gain.gain.value = Math.max(0.1, Math.min(1, volume)) * 1.2;
-
-  source.connect(gain);
-  gain.connect(ctx.destination);
-  source.start(0);
+  try {
+    patakaAudio.volume = Math.max(0.1, Math.min(1, volume));
+    patakaAudio.currentTime = 0;
+    const playPromise = patakaAudio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {});
+    }
+  } catch (e) {}
 }
 
 // Kick things off.
