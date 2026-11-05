@@ -1172,17 +1172,31 @@ mainStage.addEventListener("pointerstart", handlePointerStart);
 mainStage.addEventListener("pointerend", handlePointerEnd);
 mainStage.addEventListener("pointermove", handlePointerMove);
 
-// Unlock audio on first user interaction (browser autoplay policy).
+let initialPatakaPlayed = false;
+
+// Mobile browsers require a user gesture before Web Audio can play.
 function unlockAudioContext() {
-  try {
-    if (soundManager.ctx && soundManager.ctx.state === "suspended") {
-      soundManager.ctx.resume();
-    }
-  } catch (e) {}
+  const ctx = soundManager.ctx;
+  const resumePromise =
+    ctx.state === "suspended" ? ctx.resume() : Promise.resolve();
+  resumePromise
+    .then(() => {
+      if (
+        ctx.state !== "running" ||
+        initialPatakaPlayed ||
+        !canPlaySoundSelector()
+      ) {
+        return;
+      }
+      initialPatakaPlayed = true;
+      playPatakaSound(0.9);
+    })
+    .catch((error) => {
+      console.error("Could not unlock firework audio:", error);
+    });
 }
-window.addEventListener("pointerdown", unlockAudioContext, { once: true });
-window.addEventListener("click", unlockAudioContext, { once: true });
-window.addEventListener("touchstart", unlockAudioContext, { once: true });
+window.addEventListener("pointerdown", unlockAudioContext);
+window.addEventListener("keydown", unlockAudioContext);
 
 // Account for window resize and custom scale changes.
 function handleResize() {
@@ -1355,6 +1369,10 @@ function update(frameTime, lag) {
         // Text blast: at end of life, Happy Diwali text explodes outward.
         if (star.isText && !star.blasted && star.life < 900) {
           star.blasted = true;
+          if (star.textBlastState && !star.textBlastState.soundPlayed) {
+            star.textBlastState.soundPlayed = true;
+            playPatakaSound(1);
+          }
           const dx = star.x - star.textCx;
           const dy = star.y - star.textCy;
           const d = Math.hypot(dx, dy) || 1;
@@ -1854,6 +1872,7 @@ class Shell {
     // Text-shaped burst: form "Happy Diwali" from existing firework stars (patakhe).
     if (this.text) {
       const pts = TEXT_POINTS.length ? TEXT_POINTS : [];
+      const textBlastState = { soundPlayed: false };
       const color =
         typeof this.color === "string" && this.color !== "random"
           ? this.color
@@ -1872,6 +1891,7 @@ class Shell {
         star.noGravity = true;
         star.heavy = true;
         star.isText = true;
+        star.textBlastState = textBlastState;
         star.textCx = x;
         star.textCy = y;
         star.onDeath = null;
@@ -2168,6 +2188,7 @@ const Star = {
     instance.heavy = false;
     instance.noGravity = false;
     instance.isText = false;
+    instance.textBlastState = null;
     instance.blasted = false;
     instance.textCx = 0;
     instance.textCy = 0;
