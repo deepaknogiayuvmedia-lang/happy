@@ -865,7 +865,6 @@ let activePointerCount = 0;
 let isUpdatingSpeed = false;
 
 function handlePointerStart(event) {
-  // Click/tap events are disabled — show runs fully automatic.
   activePointerCount++;
 }
 
@@ -912,6 +911,44 @@ function unlockAudioContext() {
 }
 window.addEventListener("pointerdown", unlockAudioContext);
 window.addEventListener("keydown", unlockAudioContext);
+
+function handleClickToLaunch(event) {
+  if (!isRunning()) return;
+  if (event.target instanceof Element && event.target.closest(".btn")) return;
+
+  launchShellFromConfig({ x: event.clientX, y: event.clientY });
+}
+window.addEventListener("click", handleClickToLaunch);
+
+let lastScrollSoundTime = 0;
+function handleScrollSound() {
+  if (!canPlaySoundSelector()) return;
+
+  const playScrollSound = () => {
+    if (!canPlaySoundSelector()) return;
+
+    const now = performance.now();
+    if (now - lastScrollSoundTime < 220) return;
+    lastScrollSoundTime = now;
+    initialPatakaPlayed = true;
+    playPatakaSound(0.45);
+  };
+
+  const ctx = soundManager.ctx;
+  if (ctx.state === "running") {
+    playScrollSound();
+    return;
+  }
+
+  ctx.resume()
+    .then(() => {
+      if (ctx.state === "running") playScrollSound();
+    })
+    .catch((error) => {
+      console.error("Could not resume firework audio on scroll:", error);
+    });
+}
+window.addEventListener("scroll", handleScrollSound, { passive: true });
 
 // Account for window resize and custom scale changes.
 function handleResize() {
