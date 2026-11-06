@@ -19,16 +19,7 @@ const MAX_HEIGHT = 4320;
 const GRAVITY = 0.9; // Acceleration in px/s
 let simSpeed = 3;
 
-let shouldPlaySessionIntro = true;
-try {
-  const introPlayed = sessionStorage.getItem("happy_diwali_intro_played");
-  shouldPlaySessionIntro = introPlayed !== "true";
-  if (shouldPlaySessionIntro) {
-    sessionStorage.setItem("happy_diwali_intro_played", "true");
-  }
-} catch (error) {
-  console.error("Could not save Diwali intro session state:", error);
-}
+const shouldPlaySessionIntro = true;
 
 function getDefaultScaleFactor() {
   if (IS_MOBILE) return 0.9;
@@ -599,7 +590,6 @@ function init() {
   if (shouldPlaySessionIntro) {
     // After the fireworks show, form "Happy Diwali" from existing patakhe.
     setTimeout(() => {
-      store.state.config.autoLaunch = false;
       const shell = new Shell(textShell(shellSizeSelector()));
       shell.launch(0.5, 0.1);
     }, 7000);
