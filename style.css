@@ -18,7 +18,7 @@
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	background: #000;
+	background: transparent;
 	color: rgba(255, 255, 255, 0.5);
 	font-family: "Russo One", arial, sans-serif;
 	line-height: 1.25;
@@ -58,11 +58,13 @@
 .fireworks-section .canvas-container {
 	width: 100%;
 	height: 100%;
+	background-color: transparent;
 	transition: filter 0.3s;
 }
 
 .fireworks-section .canvas-container canvas {
 	position: absolute;
+	background-color: transparent;
 	mix-blend-mode: lighten;
 	transform: translateZ(0);
 }

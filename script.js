@@ -215,10 +215,6 @@ function configDidUpdate() {
   isNormalQuality = quality === QUALITY_NORMAL;
   isHighQuality = quality === QUALITY_HIGH;
 
-  if (skyLightingSelector() === SKY_LIGHT_NONE) {
-    appNodes.canvasContainer.style.backgroundColor = "#000";
-  }
-
   Spark.drawWidth = quality === QUALITY_HIGH ? 0.75 : 1;
 }
 
@@ -237,14 +233,12 @@ const shellNameSelector = () => store.state.config.shell;
 // Convert shell size to number.
 const shellSizeSelector = () => +store.state.config.size;
 const finaleSelector = () => store.state.config.finale;
-const skyLightingSelector = () => +store.state.config.skyLighting;
 const scaleFactorSelector = () => store.state.config.scaleFactor;
 
 // Render app UI / keep in sync with state
 const appNodes = {
   container: "#happy-diwali-section",
   stageContainer: ".stage-container",
-  canvasContainer: ".canvas-container",
   controls: ".controls",
   pauseBtnSVG: ".pause-btn use",
   soundBtnSVG: ".sound-btn use",
@@ -296,16 +290,6 @@ const COLOR_CODE_INDEXES = COLOR_CODES_W_INVIS.reduce((obj, code, i) => {
   obj[code] = i;
   return obj;
 }, {});
-// Tuples is a map keys by color codes (hex) with values of { r, g, b } tuples (still just objects).
-const COLOR_TUPLES = {};
-COLOR_CODES.forEach((hex) => {
-  COLOR_TUPLES[hex] = {
-    r: parseInt(hex.substr(1, 2), 16),
-    g: parseInt(hex.substr(3, 2), 16),
-    b: parseInt(hex.substr(5, 2), 16),
-  };
-});
-
 // Get a random color.
 function randomColorSimple() {
   return COLOR_CODES[(Math.random() * COLOR_CODES.length) | 0];
@@ -1203,18 +1187,15 @@ function render(speed) {
   const trailsCtx = trailsStage.ctx;
   const mainCtx = mainStage.ctx;
 
-  if (skyLightingSelector() !== SKY_LIGHT_NONE) {
-    colorSky(speed);
-  }
-
   // Account for high DPI screens, and custom scale factor.
   const scaleFactor = scaleFactorSelector();
   trailsCtx.scale(dpr * scaleFactor, dpr * scaleFactor);
   mainCtx.scale(dpr * scaleFactor, dpr * scaleFactor);
 
-  trailsCtx.globalCompositeOperation = "source-over";
+  trailsCtx.globalCompositeOperation = "destination-out";
   trailsCtx.fillStyle = `rgba(0, 0, 0, ${store.state.config.longExposure ? 0.0025 : 0.175 * speed})`;
   trailsCtx.fillRect(0, 0, width, height);
+  trailsCtx.globalCompositeOperation = "source-over";
 
   mainCtx.clearRect(0, 0, width, height);
 
@@ -1302,61 +1283,6 @@ function render(speed) {
 
   trailsCtx.setTransform(1, 0, 0, 1, 0, 0);
   mainCtx.setTransform(1, 0, 0, 1, 0, 0);
-}
-
-// Draw colored overlay based on combined brightness of stars (light up the sky!)
-// Note: this is applied to the canvas container's background-color, so it's behind the particles
-const currentSkyColor = { r: 0, g: 0, b: 0 };
-const targetSkyColor = { r: 0, g: 0, b: 0 };
-function colorSky(speed) {
-  // The maximum r, g, or b value that will be used (255 would represent no maximum)
-  const maxSkySaturation = skyLightingSelector() * 15;
-  // How many stars are required in total to reach maximum sky brightness
-  const maxStarCount = 500;
-  let totalStarCount = 0;
-  // Initialize sky as black
-  targetSkyColor.r = 0;
-  targetSkyColor.g = 0;
-  targetSkyColor.b = 0;
-  // Add each known color to sky, multiplied by particle count of that color. This will put RGB values wildly out of bounds, but we'll scale them back later.
-  // Also add up total star count.
-  COLOR_CODES.forEach((color) => {
-    const tuple = COLOR_TUPLES[color];
-    const count = Star.active[color].length;
-    totalStarCount += count;
-    targetSkyColor.r += tuple.r * count;
-    targetSkyColor.g += tuple.g * count;
-    targetSkyColor.b += tuple.b * count;
-  });
-
-  // Clamp intensity at 1.0, and map to a custom non-linear curve. This allows few stars to perceivably light up the sky, while more stars continue to increase the brightness but at a lesser rate. This is more inline with humans' non-linear brightness perception.
-  const intensity = Math.pow(Math.min(1, totalStarCount / maxStarCount), 0.3);
-  // Figure out which color component has the highest value, so we can scale them without affecting the ratios.
-  // Prevent 0 from being used, so we don't divide by zero in the next step.
-  const maxColorComponent = Math.max(
-    1,
-    targetSkyColor.r,
-    targetSkyColor.g,
-    targetSkyColor.b,
-  );
-  // Scale all color components to a max of `maxSkySaturation`, and apply intensity.
-  targetSkyColor.r =
-    (targetSkyColor.r / maxColorComponent) * maxSkySaturation * intensity;
-  targetSkyColor.g =
-    (targetSkyColor.g / maxColorComponent) * maxSkySaturation * intensity;
-  targetSkyColor.b =
-    (targetSkyColor.b / maxColorComponent) * maxSkySaturation * intensity;
-
-  // Animate changes to color to smooth out transitions.
-  const colorChange = 10;
-  currentSkyColor.r +=
-    ((targetSkyColor.r - currentSkyColor.r) / colorChange) * speed;
-  currentSkyColor.g +=
-    ((targetSkyColor.g - currentSkyColor.g) / colorChange) * speed;
-  currentSkyColor.b +=
-    ((targetSkyColor.b - currentSkyColor.b) / colorChange) * speed;
-
-  appNodes.canvasContainer.style.backgroundColor = `rgb(${currentSkyColor.r | 0}, ${currentSkyColor.g | 0}, ${currentSkyColor.b | 0})`;
 }
 
 mainStage.addEventListener("ticker", update);
